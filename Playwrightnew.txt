@@ -1,0 +1,812 @@
+DoctorsPage
+
+import { Page, Locator, expect } from '@playwright/test';
+ 
+// Use an interface or type for the function arguments (best practice)
+interface ImagingOrderDetails {
+    patientName: string;
+    orderType: string;
+    orderItem: string;
+}
+ 
+export class DoctorsPage {
+    // Locators defined in the original image
+    readonly page: Page;
+    readonly loginPageLink: Locator;
+    readonly inpatientDepartmentTab: Locator;
+    readonly privateButton: Locator;
+    readonly searchbar: Locator;
+    readonly orderDropdown: Locator;
+    readonly imagingActionButton: Locator;
+    readonly searchInpatient: Locator;
+    readonly privateFiltersButton: Locator;
+    readonly signOrderButton: Locator;
+    readonly successMessage: Locator;
+ 
+    // A new locator for the "Process Item" button, based on the original code's intention
+    readonly processItemButton: Locator; 
+    
+    // Locators needed for the performInpatientImagingOrder logic
+    readonly patientSearchResult: (name: string) => Locator;
+    readonly orderItemSelector: Locator;
+ 
+ 
+    constructor(page: Page) {
+        this.page = page;
+        
+        // 1. Locators for page elements (using best practices: getByRole, getByText, getByPlaceholder)
+        
+        // Tab/Button to switch to Inpatient Department
+        this.inpatientDepartmentTab = page.getByRole('tab', { name: 'Inpatient Department' }); 
+        
+        // Search bar (assuming a text input for searching)
+        this.searchbar = page.getByPlaceholder('Search for patient', { exact: true });
+        
+        // Dropdown/Button to initiate a new order
+        this.orderDropdown = page.getByRole('button', { name: 'New Order' }).or(page.getByRole('combobox', { name: 'Select Order' }));
+ 
+        // Action button to select "Imaging" (assuming a button or link)
+        this.imagingActionButton = page.getByRole('button', { name: 'Imaging Action' });
+ 
+        // Button to process the current item (e.g., save or move to next step)
+        this.processItemButton = page.getByRole('button', { name: 'Process Item' });
+ 
+        // Button to sign/complete the order (e.g., a "Sign & Complete" button)
+        this.signOrderButton = page.getByRole('button', { name: 'Sign Order' }).or(page.getByRole('button', { name: 'Complete' }));
+ 
+        // Success message element (e.g., an alert or notification)
+        this.successMessage = page.getByText('Order successfully placed', { exact: false });
+        
+        
+        // 2. Locators that might be needed, using common conventions (can be adjusted)
+        
+        this.patientSearchResult = (name: string) => page.getByRole('listitem').filter({ hasText: name });
+        this.orderItemSelector = page.getByLabel('Order Item').or(page.getByPlaceholder('Select Order Item'));
+ 
+        // --- Other locators from your snippet (kept as page.locator for simplicity) ---
+        this.loginPageLink = page.locator('a[href="/login"]');
+        this.privateButton = page.locator('text=Private');
+        this.searchInpatient = page.locator('input[placeholder="Search Inpatient"]');
+        this.privateFiltersButton = page.locator('#filters-private');
+    }
+ 
+    /**
+     * @description This method verifies the process of placing an imaging order for an Inpatient.
+     * It navigates to the Inpatient Department, searches for a specific patient, selects an imaging action, 
+     * selects an order type, specifies the order item, and completes the process by signing the order.
+     * The method confirms the successful placement of the order by verifying the success message.
+     */
+    async performInpatientImagingOrder({ patientName, orderType, orderItem }: ImagingOrderDetails) {
+        // 1. Navigate to the Inpatient Department Tab
+        await this.inpatientDepartmentTab.click();
+ 
+        // 2. Search for a specific patient and select them
+        await this.searchbar.fill(patientName);
+        // Wait for results and click the patient's row/card
+        await this.patientSearchResult(patientName).click();
+ 
+        // 3. Select an imaging action
+        await this.imagingActionButton.click(); 
+ 
+        // 4. Select Order Type
+        // Note: Playwright's selectOption works on <select> elements. 
+        // If it's a custom dropdown, you might need to click the dropdown and then click the option.
+        await this.orderDropdown.selectOption({ label: orderType });
+        
+        // 5. Specify the Order Item
+        await this.orderItemSelector.fill(orderItem); 
+        await this.page.keyboard.press('Enter'); // Typically needed after typing an item
+ 
+        // 6. Process and Sign the Order
+        await this.processItemButton.click();
+        await this.signOrderButton.click(); 
+ 
+        // 7. Verify the success message
+        await expect(this.successMessage).toBeVisible({ timeout: 10000 }); // Wait up to 10s for success message
+    }
+}
+ 
+Login 
+import { Page, Locator, expect } from '@playwright/test';
+ 
+// Define an interface for the login data (using data from login.json)
+interface LoginData {
+    username: string;
+    password: string;
+}
+ 
+export class LoginPage {
+    readonly page: Page;
+    
+    // Locators based on the class properties in the image
+    readonly usernameInput: Locator;
+    readonly passwordInput: Locator;
+    readonly loginButton: Locator;
+    readonly loginErrorMessages: Locator;
+    readonly adminMessage: Locator; // Assuming a welcome message on successful login
+    readonly logout: Locator;
+ 
+    constructor(page: Page) {
+        this.page = page;
+ 
+        // --- Locator Initialization (Using Playwright Best Practices) ---
+        
+        // Input fields for credentials
+        this.usernameInput = page.getByPlaceholder('Username').or(page.getByLabel('Username'));
+        this.passwordInput = page.getByPlaceholder('Password').or(page.getByLabel('Password'));
+ 
+        // The Login Button
+        this.loginButton = page.getByRole('button', { name: 'Log in' }).or(page.getByRole('button', { name: 'Sign in' }));
+ 
+        // Error message container (e.g., text displayed after failed login)
+        this.loginErrorMessages = page.getByText('Invalid Credentials').or(page.locator('.alert-danger'));
+ 
+        // A unique element on the post-login/Admin page to confirm success
+        // Example: The user's name or a successful login message
+        this.adminMessage = page.getByText('Welcome Admin').or(page.locator('#admin-dashboard-link')); 
+        
+        // Logout button/link, typically found in a dropdown or corner
+        this.logout = page.getByRole('button', { name: 'Logout' }).or(page.getByRole('link', { name: 'Sign Out' }));
+    }
+ 
+    // --- Core Automation Functions ---
+ 
+    /**
+     * @test This method performs the login operation using the provided valid credentials. 
+     * It highlights the input fields for better visibility during interaction and fills the username and password fields. 
+     * After submitting the login form by clicking the login button, it validates the success of the login process. 
+     * The login is considered successful if there are no errors.
+     */
+    async performLogin(data: LoginData): Promise<void> {
+        // 1. Fill credentials and click login
+        await this.usernameInput.fill(data.username);
+        await this.passwordInput.fill(data.password);
+        await this.loginButton.click();
+ 
+        // 2. Validate success: Wait for the post-login element (adminMessage) to be visible
+        //    or ensure the error message is not present.
+        await expect(this.adminMessage).toBeVisible({ timeout: 10000 });
+    }
+ 
+    // --------------------------------------------------------------------------------------------------
+ 
+    /**
+     * @test This method attempts login with invalid credentials and retrieves the resulting error message.
+     * @description Tries logging in with incorrect credentials to verify the login error message display.
+     * Highlights each input field and the login button during interaction. Captures and returns 
+     * the error message displayed upon failed login attempt.
+     */
+    async performLoginWithInvalidCredentials(data: LoginData): Promise<string> {
+        // 1. Fill invalid credentials and click login
+        await this.usernameInput.fill(data.username);
+        await this.passwordInput.fill(data.password);
+        await this.loginButton.click();
+ 
+        // 2. Validate error: Wait for the error message to appear
+        await expect(this.loginErrorMessages).toBeVisible({ timeout: 5000 });
+ 
+        // 3. Capture and return the error message text
+        const errorMessage = await this.loginErrorMessages.innerText();
+        return errorMessage.trim();
+    }
+ 
+    // --------------------------------------------------------------------------------------------------
+ 
+    /**
+     * @test This method verifies the logout functionality from the Admin dropdown.
+     * @expected User is logged out successfully and the login page is displayed.
+     */
+    async verifyLogoutFunctionality(): Promise<void> {
+        // 1. Locate and click the element that opens the logout link (if needed, often a user profile icon)
+        // await this.userProfileDropdown.click(); 
+ 
+        // 2. Click the Logout button/link
+        await this.logout.click();
+ 
+        // 3. Validate success: The login page is displayed (e.g., the username input is visible)
+        await expect(this.usernameInput).toBeVisible({ timeout: 10000 });
+    }
+}
+ 
+
+Maternity
+
+import { Page, Locator, expect } from '@playwright/test';
+ 
+export class MaternityPage {
+    readonly page: Page;
+    
+    // Locators defined in the image
+    readonly maternityLink: Locator;
+    readonly reportLink: Locator;
+    readonly maternityAllowanceReport: Locator;
+    readonly dateFrom: Locator;
+    readonly showReportButton: Locator;
+    readonly dataGrid: Locator; // This locator is inferred from the description
+ 
+    constructor(page: Page) {
+        this.page = page;
+ 
+        // --- Locator Initialization (Using Playwright Best Practices) ---
+        
+        // Link to navigate to the Maternity module
+        this.maternityLink = page.getByRole('link', { name: 'Maternity' });
+        
+        // Link to access the Reports section
+        this.reportLink = page.getByRole('link', { name: 'Reports' }); 
+        
+        // Link to open the specific report
+        this.maternityAllowanceReport = page.getByRole('link', { name: 'Maternity Allowance Report' });
+ 
+        // Input field for the start date
+        this.dateFrom = page.getByLabel('From Date').or(page.getByPlaceholder('Select From Date'));
+        
+        // Button to generate/show the report
+        this.showReportButton = page.getByRole('button', { name: 'Show Report' });
+ 
+        // The data table/grid that appears after the report is generated
+        // (Assuming a common table structure or a div/section)
+        this.dataGrid = page.locator('#maternity-report-grid').or(page.locator('.data-grid-container'));
+    }
+ 
+    // --- Core Automation Function ---
+ 
+    /**
+     * @test This method verifies the functionality of the Maternity Allowance Report.
+     * @description It navigates to the Maternity module, accesses the report section, and opens the Maternity Allowance Report.
+     * Initially, it ensures that the data grid is not visible, selects a date range by entering the 'From date,'
+     * and clicks the 'Show Report' button. Finally, it waits for the report to load and asserts that the data grid becomes visible.
+     * Throws an error if the data grid visibility states do not match the expected outcomes.
+     */
+    async verifyMaternityAllowanceReport(fromDate: string): Promise<void> {
+        // 1. Navigate to the Maternity Module and Report Section
+        await this.maternityLink.click();
+        await this.reportLink.click();
+        
+        // 2. Open the specific report
+        await this.maternityAllowanceReport.click();
+        
+        // 3. Initial state check: Ensure the data grid is NOT visible
+        //    Use a timeout of 1000ms for a quick negative assertion.
+        await expect(this.dataGrid).not.toBeVisible({ timeout: 1000 }); 
+        
+        // 4. Select a date range by entering the 'From date'
+        await this.dateFrom.fill(fromDate); 
+        // Note: If a 'To Date' is required, you'd add a separate locator and fill step.
+ 
+        // 5. Click the 'Show Report' button
+        await this.showReportButton.click();
+ 
+        // 6. Final state check: Wait for the report to load and assert the data grid IS visible
+        //    Use a longer timeout for waiting on report generation.
+        await expect(this.dataGrid).toBeVisible({ timeout: 20000 }); 
+        
+        // Optional: You could add a check for the number of rows or a specific table header to confirm data loaded.
+        // const rowCount = await this.dataGrid.locator('tbody tr').count();
+        // expect(rowCount).toBeGreaterThan(0);
+    }
+}
+ 
+
+
+Medical
+
+
+
+import { Page, Locator, expect } from '@playwright/test';
+ 
+// Interface for the input parameters
+interface RecordMatchingData {
+    fromDate: string;
+    toDate: string; // Assuming 'toDate' is needed for a date range filter
+    patientGender: 'Male' | 'Female' | 'Other'; // Assuming the filter values
+    searchKeyword: string;
+}
+ 
+export class MedicalRecordsPage {
+    readonly page: Page;
+    
+    // Locators defined in the image
+    readonly medicalRecordsLink: Locator;
+    readonly dateFrom: Locator;
+    readonly dateTo: Locator;
+    readonly genderFilter: Locator;
+    readonly searcher: Locator; // Likely the main search input field
+    readonly applyFilterButton: Locator; // Inferred to apply the date/gender filters
+    readonly searchButton: Locator; // Inferred to apply the search keyword
+ 
+    // Inferred Locator for the resulting patient records grid/list
+    readonly patientRecordsGrid: Locator; 
+    
+    // Inferred Locator for a patient row that matches the criteria
+    readonly matchedPatientRow: (keyword: string) => Locator;
+ 
+    constructor(page: Page) {
+        this.page = page;
+ 
+        // --- Locator Initialization (Using Playwright Best Practices) ---
+        
+        // Link to navigate to the Medical Records module
+        this.medicalRecordsLink = page.getByRole('link', { name: 'Medical Records' }).or(page.getByRole('link', { name: 'Dispensary' }));
+        
+        // Date range filters
+        this.dateFrom = page.getByLabel('From Date').or(page.getByPlaceholder('Select From Date'));
+        this.dateTo = page.getByLabel('To Date').or(page.getByPlaceholder('Select To Date')); // Inferred 'toDate' locator
+        
+        // Gender Filter dropdown/select box
+        this.genderFilter = page.getByLabel('Gender Filter').or(page.getByRole('combobox', { name: 'Gender' }));
+        
+        // The main search input field
+        this.searcher = page.getByPlaceholder('Search patient').or(page.getByLabel('Patient Search')); 
+        
+        // Button to apply all filters (date/gender)
+        this.applyFilterButton = page.getByRole('button', { name: 'Apply Filter' });
+        
+        // Element that holds the filtered list of patient records
+        this.patientRecordsGrid = page.locator('#patient-records-table').or(page.locator('.records-list-container'));
+ 
+        // Locator for a specific row/record based on a keyword (e.g., patient name)
+        // This is generic and will check for the keyword within the grid/table.
+        this.matchedPatientRow = (keyword: string) => this.patientRecordsGrid.locator('tr').filter({ hasText: keyword });
+    }
+ 
+    // --- Core Automation Function ---
+ 
+    /**
+     * @test This method verifies patient records in the Dispensary module by applying a date filter
+     * and searching for a specific patient by gender. It validates the search results by checking if the
+     * gender appears in the filtered records.
+     */
+    async verifyRecordMatching(data: RecordMatchingData): Promise<void> {
+        // 1. Navigate to the Medical Records/Dispensary module
+        await this.medicalRecordsLink.click();
+ 
+        // 2. Apply Date Filter
+        await this.dateFrom.fill(data.fromDate);
+        await this.dateTo.fill(data.toDate); // Assuming a To Date is used for range filtering
+ 
+        // 3. Apply Gender Filter
+        // SelectOption works for <select> tags, otherwise it's a click and text match.
+        await this.genderFilter.selectOption({ label: data.patientGender });
+        
+        // 4. Click the Apply Filter button
+        await this.applyFilterButton.click(); 
+        await expect(this.patientRecordsGrid).toBeVisible(); // Wait for the grid to reload/appear
+ 
+        // 5. Search for a specific patient (using a search keyword, e.g., patient name)
+        await this.searcher.fill(data.searchKeyword);
+        // Assuming hitting Enter or a separate search button is not needed after filling the 'searcher'
+        
+        // 6. Validate the search result
+        // Check if the patient record containing the search keyword is visible
+        const patientRow = this.matchedPatientRow(data.searchKeyword);
+        await expect(patientRow).toBeVisible({ timeout: 10000 });
+        
+        // 7. Validate that the returned record matches the applied gender filter
+        // We check the text of the entire matched row to ensure it contains the expected gender.
+        const rowText = await patientRow.innerText();
+        expect(rowText).toContain(data.patientGender);
+ 
+        console.log(`Successfully found patient record for '${data.searchKeyword}' with gender '${data.patientGender}'.`);
+    }
+}
+ 
+
+Pharmacy
+
+import { Page, Locator, expect } from '@playwright/test';
+ 
+// Define the structure for the receipt data
+interface ReceiptData {
+    itemName: string;
+    batchNumber: string;
+    quantity: string;
+    rate: string;
+    supplierName: string;
+    invoiceNumber: string; // The randomly generated invoice number
+}
+ 
+export class PharmaPage {
+    readonly page: Page;
+    
+    // Locators defined in the image
+    readonly pharmacyModule: Locator;
+    readonly orderLink: Locator;
+    readonly addNewReceiptButton: Locator;
+    readonly goodReceiptModalTitle: Locator;
+    readonly printReceiptButton: Locator;
+    readonly itemNameField: Locator;
+    readonly batchField: Locator;
+    readonly quantityField: Locator;
+    readonly rateField: Locator;
+    readonly saveButton: Locator; // Inferred from the constructor
+    readonly invoiceField: Locator; // Inferred from the constructor
+    readonly supplierNameField: Locator; // Inferred from the constructor
+    readonly successMessage: Locator;
+ 
+    constructor(page: Page) {
+        this.page = page;
+ 
+        // --- Locator Initialization (Using Playwright Best Practices) ---
+        
+        // Link/Tab to navigate to the Pharmacy module
+        this.pharmacyModule = page.getByRole('link', { name: 'Pharmacy' });
+        
+        // Link/Tab to navigate to the ordering section
+        this.orderLink = page.getByRole('link', { name: 'Orders' });
+        
+        // Button to initiate a new Good Receipt
+        this.addNewReceiptButton = page.getByRole('button', { name: 'Add New Receipt' });
+ 
+        // Title of the modal that appears (for validation)
+        this.goodReceiptModalTitle = page.getByRole('heading', { name: 'Good Receipt Form' });
+ 
+        // Button to trigger the printing process
+        this.printReceiptButton = page.getByRole('button', { name: 'Print Receipt' });
+ 
+        // Input fields for receipt details
+        this.itemNameField = page.getByLabel('Item Name').or(page.getByPlaceholder('Enter Item Name'));
+        this.batchField = page.getByLabel('Batch Number').or(page.getByPlaceholder('Enter Batch Number'));
+        this.quantityField = page.getByLabel('Quantity').or(page.getByPlaceholder('Enter Quantity'));
+        this.rateField = page.getByLabel('Rate').or(page.getByPlaceholder('Enter Rate'));
+        this.supplierNameField = page.getByLabel('Supplier Name').or(page.getByPlaceholder('Select Supplier'));
+        this.invoiceField = page.getByLabel('Invoice Number').or(page.getByPlaceholder('Enter Invoice #'));
+        
+        // Button to save the receipt
+        this.saveButton = page.getByRole('button', { name: 'Save' }); 
+        
+        // Success message element
+        this.successMessage = page.getByText('Receipt saved successfully').or(page.locator('.alert-success'));
+    }
+ 
+    // --- Core Automation Functions ---
+ 
+    /**
+     * @test This method navigates to the Pharmacy module, verifies the Good Receipt modal,
+     * handles alerts during the Good Receipt print process, and ensures the modal is visible
+     * before performing further actions.
+     */
+    async asyncHandlingAlertsToRadiology(): Promise<void> {
+        // 1. Navigate to the Pharmacy module and Orders section
+        await this.pharmacyModule.click();
+        await this.orderLink.click();
+ 
+        // 2. Click the button to open the Good Receipt modal
+        await this.addNewReceiptButton.click();
+ 
+        // 3. Verify the Good Receipt modal is visible
+        await expect(this.goodReceiptModalTitle).toBeVisible();
+ 
+        // 4. Handle the Print Alert
+        // Playwright handles standard browser dialogs/alerts automatically.
+        // For custom print dialogs, we might listen for a 'dialog' event.
+        this.page.on('dialog', async dialog => {
+            console.log(`Alert detected: ${dialog.message()}`);
+            // Automatically accept/dismiss the alert. For a print dialog, 'dismiss' usually cancels printing.
+            // If the goal is to proceed with printing, 'accept' is used.
+            await dialog.accept(); 
+        });
+        
+        // 5. Trigger the print action to test the handler
+        // If this button is clicked and triggers a browser print dialog, the 'dialog' handler above is used.
+        await this.printReceiptButton.click();
+        
+        // 6. Ensure the modal remains visible (or re-open if it closes after print) for further actions
+        await expect(this.goodReceiptModalTitle).toBeVisible();
+    }
+ 
+    // --------------------------------------------------------------------------------------------------
+ 
+    /**
+     * @test This method verifies the process of adding a new Good Receipt in the Pharmacy module,
+     * filling in item details such as item name, batch number, quantity, rate, supplier name,
+     * and a randomly generated invoice number. It concludes by validating the successful printing of the receipt.
+     */
+    async verifyPrintReceipt(data: ReceiptData): Promise<void> {
+        // Ensure we are on the Good Receipt modal (call the handling function if needed, or navigate directly)
+        // For simplicity, let's assume the modal is opened here or the test setup ensures it.
+        await this.pharmacyModule.click();
+        await this.orderLink.click();
+        await this.addNewReceiptButton.click();
+        await expect(this.goodReceiptModalTitle).toBeVisible();
+ 
+        // 1. Fill in item details
+        await this.itemNameField.fill(data.itemName);
+        await this.batchField.fill(data.batchNumber);
+        await this.quantityField.fill(data.quantity);
+        await this.rateField.fill(data.rate);
+        
+        // 2. Select Supplier Name (assuming a dropdown/select)
+        await this.supplierNameField.selectOption({ label: data.supplierName });
+        
+        // 3. Fill in the generated invoice number
+        await this.invoiceField.fill(data.invoiceNumber);
+ 
+        // 4. Save the receipt
+        await this.saveButton.click();
+        
+        // 5. Validate successful saving
+        await expect(this.successMessage).toBeVisible({ timeout: 10000 });
+        
+        // 6. Validate successful printing (by clicking print and verifying the print process handled correctly)
+        
+        // Setup the print handler again before clicking the print button
+        let dialogHandled = false;
+        this.page.once('dialog', async dialog => {
+            await dialog.accept();
+            dialogHandled = true;
+        });
+ 
+        await this.printReceiptButton.click();
+ 
+        // Wait a moment and assert that the print dialog handler was executed
+        // A simple timeout check is often used to ensure the dialog event was caught.
+        await this.page.waitForTimeout(2000); // Give time for the dialog to appear and be handled
+        expect(dialogHandled).toBe(true);
+    }
+}
+ 
+
+
+Radiology
+
+import { Page, Locator, expect } from '@playwright/test';
+import { DateTime } from 'luxon'; // Recommended for date manipulation in TypeScript
+ 
+export class RadiologyPage {
+    readonly page: Page;
+    
+    // Locators defined in the image
+    readonly radiologyModule: Locator;
+    readonly filterRequestsSubmodule: Locator;
+    readonly filterDropdown: Locator;
+    readonly fromDate: Locator;
+    readonly toDate: Locator;
+    readonly okButton: Locator;
+    readonly dateRangeDropdown: Locator;
+    readonly lastThreeMonthsOption: Locator;
+    readonly dateCells: Locator; // Locator for all date cells in the results table
+    readonly imagingTypeDropdown: Locator; // Inferred for the second test
+ 
+    constructor(page: Page) {
+        this.page = page;
+ 
+        // --- Locator Initialization (Using Playwright Best Practices) ---
+        
+        // Link/Tab to navigate to the Radiology module
+        this.radiologyModule = page.getByRole('link', { name: 'Radiology' });
+        
+        // Link/Sub-tab for filtering requests
+        this.filterRequestsSubmodule = page.getByRole('tab', { name: 'Filter Requests' });
+        
+        // Dropdown to select different date ranges/filters
+        this.filterDropdown = page.getByLabel('Date Filter').or(page.getByRole('combobox', { name: 'Date Range' }));
+        
+        // Input fields for custom date range
+        this.fromDate = page.getByLabel('From Date').or(page.getByPlaceholder('From Date'));
+        this.toDate = page.getByLabel('To Date').or(page.getByPlaceholder('To Date'));
+        this.okButton = page.getByRole('button', { name: 'OK' });
+        
+        // Specific option for "Last 3 Months" in the date range dropdown
+        this.lastThreeMonthsOption = page.getByRole('option', { name: 'Last 3 Months' });
+ 
+        // Locator for all date cells in the results table (e.g., column index 2)
+        this.dateCells = page.locator('#radiology-results-table tbody tr td:nth-child(2)'); 
+        
+        // Locator for the date range dropdown itself
+        this.dateRangeDropdown = page.getByRole('combobox', { name: 'Date Range' });
+        
+        // Dropdown to filter by imaging type
+        this.imagingTypeDropdown = page.getByLabel('Imaging Type').or(page.getByRole('combobox', { name: 'Imaging Type' }));
+    }
+ 
+    // --- Helper Function for Date Validation ---
+ 
+    /**
+     * @description Checks if a given date string is within the last three months of the current date.
+     * @param dateString The date to check (e.g., 'YYYY-MM-DD' or 'DD/MM/YYYY').
+     * @param format The Luxon format string for the dateString.
+     * @returns True if the date is within the last three months, false otherwise.
+     */
+    private isDateWithinLastThreeMonths(dateString: string, format: string): boolean {
+        // NOTE: You need to install luxon (npm install luxon) for this to work.
+        // If not using luxon, you'll need to use standard Date objects and handle timezones/offsets.
+        
+        const currentDate = DateTime.now().startOf('day');
+        const threeMonthsAgo = currentDate.minus({ months: 3 }).startOf('day');
+        const checkDate = DateTime.fromFormat(dateString, format);
+ 
+        if (!checkDate.isValid) {
+            console.error(`Invalid date format for: ${dateString}.`);
+            return false;
+        }
+ 
+        return checkDate >= threeMonthsAgo && checkDate <= currentDate;
+    }
+ 
+    // --- Core Automation Functions ---
+ 
+    /**
+     * @test This method verifies that the data displayed in the radiology list request is within the last three months.
+     * @description It navigates to the Radiology module, selects the 'Last 3 Months' option from the date range dropdown, and confirms the filter.
+     * It retrieves all dates from the table, validates their format, and checks if they fall within the last three months.
+     * Logs detailed errors if dates are invalid or out of range and provides debug information about the number of date cells and retrieved dates.
+     * Throws an error if any date is invalid or outside the range.
+     */
+    async verifyDataWithinThreeMonths(): Promise<void> {
+        // 1. Navigate to the Radiology module and filter sub-module
+        await this.radiologyModule.click();
+        await this.filterRequestsSubmodule.click();
+ 
+        // 2. Select the 'Last 3 Months' option from the date range dropdown
+        // Assuming selecting an option from a dropdown
+        await this.dateRangeDropdown.selectOption({ label: 'Last 3 Months' });
+        
+        // 3. Confirm the filter (if a separate button is needed after selection)
+        // await this.okButton.click(); 
+ 
+        // 4. Retrieve all date cells from the table
+        const dateLocators = await this.dateCells.all();
+        const retrievedDates = await Promise.all(dateLocators.map(locator => locator.innerText()));
+ 
+        console.log(`[DEBUG] Total date cells found: ${retrievedDates.length}`);
+        
+        // 5. Validate dates
+        let allDatesValidAndInRange = true;
+        const expectedDateFormat = 'dd/MM/yyyy'; // Adjust this based on your application's date format
+ 
+        for (const date of retrievedDates) {
+            const isWithinRange = this.isDateWithinLastThreeMonths(date, expectedDateFormat);
+            
+            if (!isWithinRange) {
+                console.error(`[ERROR] Date out of range: ${date}`);
+                allDatesValidAndInRange = false;
+            }
+        }
+        
+        // 6. Throw an error if validation fails
+        if (!allDatesValidAndInRange) {
+            throw new Error(`Data validation failed: At least one date was outside the 'Last 3 Months' range or was invalid.`);
+        }
+        
+        console.log('All retrieved dates are within the last three months and are valid.');
+    }
+    
+    // --------------------------------------------------------------------------------------------------
+ 
+    /**
+     * @test This method filters the list of radiology requests based on a specified date range and imaging type.
+     * @description It navigates to the Radiology module, applies the selected filter, enters the 'From' and 'To' dates, and confirms the filter action.
+     * It verifies that the filtered results match the specified imaging type.
+     */
+    async filterListRequestByDateAndType(fromDate: string, toDate: string, imagingType: string): Promise<void> {
+        // 1. Navigate to the Radiology module and filter sub-module
+        await this.radiologyModule.click();
+        await this.filterRequestsSubmodule.click();
+ 
+        // 2. Enter 'From' and 'To' dates
+        await this.fromDate.fill(fromDate);
+        await this.toDate.fill(toDate);
+        
+        // 3. Select the Imaging Type filter
+        await this.imagingTypeDropdown.selectOption({ label: imagingType });
+ 
+        // 4. Confirm the filter action
+        await this.okButton.click(); 
+        
+        // 5. Verify filtered results match the specified imaging type
+        
+        // Locator for all cells/rows that should contain the imaging type text
+        const imagingTypeCells = this.page.locator('.radiology-results-table td.imaging-type-column');
+        await expect(imagingTypeCells.first()).toBeVisible({ timeout: 10000 }); // Wait for results to load
+ 
+        const typeLocators = await imagingTypeCells.all();
+        const allTypes = await Promise.all(typeLocators.map(locator => locator.innerText()));
+ 
+        // Check if ALL retrieved types exactly match the requested imagingType
+        const allMatch = allTypes.every(type => type.trim() === imagingType);
+        
+        if (!allMatch) {
+            throw new Error(`Filter verification failed. Expected all types to be '${imagingType}', but found other types.`);
+        }
+ 
+        console.log(`Successfully filtered and verified all results match Imaging Type: ${imagingType}.`);
+    }
+}
+ 
+
+
+Substore
+
+import { Page, Locator, expect } from '@playwright/test';
+ 
+interface ImagingOrderDetails {
+    patientName: string;
+    orderType: string;
+    orderItem: string;
+}
+ 
+export class DoctorsPage {
+    readonly page: Page;
+    
+    // Locators defined in the image and inferred
+    readonly inpatientDepartmentTab: Locator;
+    readonly searchbar: Locator;
+    readonly orderDropdown: Locator;
+    readonly imagingAction: Locator; 
+    readonly processItemButton: Locator;
+    readonly signOrderButton: Locator;
+    readonly successMessage: Locator;
+    
+    readonly patientSearchResult: (name: string) => Locator;
+    readonly orderItemSelector: Locator;
+ 
+    constructor(page: Page) {
+        this.page = page;
+        
+        // --- Locator Initialization (Using Playwright Best Practices) ---
+        
+        // Tab/Button to switch to Inpatient Department
+        this.inpatientDepartmentTab = page.getByRole('tab', { name: 'Inpatient Department' }); 
+        
+        // Search bar (for patient search)
+        this.searchbar = page.getByPlaceholder('Search for patient');
+        
+        // Dropdown/Button to initiate a new order
+        this.orderDropdown = page.getByRole('combobox', { name: 'Order Type' });
+ 
+        // Button/Link to select "Imaging Action"
+        this.imagingAction = page.getByRole('button', { name: 'Imaging' });
+ 
+        // Button to process the current item (e.g., save or move to next step)
+        this.processItemButton = page.getByRole('button', { name: 'Process Item' });
+ 
+        // Button to sign/complete the order
+        this.signOrderButton = page.getByRole('button', { name: 'Sign Order' });
+ 
+        // Success message element
+        this.successMessage = page.getByText('Order successfully placed', { exact: false });
+        
+        // Inferred Locators
+        this.patientSearchResult = (name: string) => page.getByRole('listitem').filter({ hasText: name });
+        this.orderItemSelector = page.getByLabel('Order Item').or(page.getByPlaceholder('Select Order Item'));
+    }
+ 
+    // --- Core Automation Function ---
+ 
+    /**
+     * @test This method verifies the process of placing an imaging order for an Inpatient.
+     * @description It navigates to the Inpatient Department, searches for a specific patient, selects an imaging action, 
+     * selects an order type, specifies the order item, and completes the process by signing the order.
+     * The method confirms the successful placement of the order by verifying the success message.
+     */
+    async performInpatientImagingOrder({ patientName, orderType, orderItem }: ImagingOrderDetails): Promise<void> {
+        // 1. Navigate to the Inpatient Department Tab
+        await this.inpatientDepartmentTab.click();
+ 
+        // 2. Search for a specific patient and select them
+        await this.searchbar.fill(patientName);
+        await this.page.waitForTimeout(500); // Wait for search results to appear
+        await this.patientSearchResult(patientName).click();
+ 
+        // 3. Select an imaging action
+        await this.imagingAction.click(); 
+        
+        // 4. Select Order Type
+        await this.orderDropdown.selectOption({ label: orderType });
+        
+        // 5. Specify the Order Item
+        await this.orderItemSelector.fill(orderItem); 
+        await this.page.keyboard.press('Enter');
+ 
+        // 6. Process and Sign the Order
+        await this.processItemButton.click();
+        await this.signOrderButton.click(); 
+ 
+        // 7. Verify the success message
+        await expect(this.successMessage).toBeVisible({ timeout: 15000 });
+        
+        console.log(`✅ Successfully placed imaging order for patient: ${patientName}`);
+    }
+}
+ 
