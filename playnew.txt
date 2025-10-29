@@ -1,0 +1,111 @@
+Medical
+// tests/doctors.spec.ts
+ 
+import { test, expect } from '@playwright/test';
+import { DoctorsPage } from '../pages/DoctorsPage'; // Adjust path as necessary
+import { LoginPage } from '../pages/LoginPage';     // For setting up the logged-in state
+import * as loginData from '../data/login.json';     // For valid login credentials
+import * as doctorData from '../data/doctor.json'; // Assumed data for the order
+ 
+const login = loginData as any; // Type assertion for login data
+const data = doctorData as any; // Type assertion for doctor data
+ 
+test.describe('Doctors Page - Inpatient Imaging Order', () => {
+    let doctorsPage: DoctorsPage;
+    let loginPage: LoginPage;
+ 
+    // Use a fixture to set up and ensure the user is logged in before the test
+    test.beforeEach(async ({ page }) => {
+        doctorsPage = new DoctorsPage(page);
+        loginPage = new LoginPage(page);
+ 
+        // 1. Navigate to the application URL (https://healthapp.vaksha.com)
+        await page.goto('https://healthapp.vaksha.com'); 
+        
+        // 2. Perform Login to reach the Doctors/Admin dashboard
+        await loginPage.performLogin({
+            username: login.ValidLogin.ValidUserName,
+            password: login.ValidLogin.ValidPassword
+        });
+ 
+        // Optional: Ensure Doctors/Home page is fully loaded
+        await expect(page.url()).not.toContain('login');
+    });
+ 
+    // --- Test: Place Inpatient Imaging Order ---
+    test('should successfully place an imaging order for an inpatient', async () => {
+        console.log('Test: Starting Inpatient Imaging Order Test');
+        
+        await doctorsPage.performInpatientImagingOrder({
+            patientName: data.ImagingOrderData.patientName,
+            orderType: data.ImagingOrderData.orderType,
+            orderItem: data.ImagingOrderData.orderItem
+        });
+ 
+        // Final assertion: The success message should be visible (already inside the function, but good to re-assert)
+        await expect(doctorsPage.successMessage).toBeVisible(); 
+        console.log(' Imaging order successfully placed and success message verified.');
+    });
+});
+
+
+
+
+
+Radiology
+
+// tests/medicalrecords.spec.ts
+ 
+import { test, expect } from '@playwright/test';
+import { MedicalRecordsPage } from '../pages/MedicalRecordsPage'; // Adjust path as necessary
+import { LoginPage } from '../pages/LoginPage';         
+import * as loginData from '../data/login.json';       // For valid login and date range
+import * as medicalRecordData from '../data/medicalRecord.json'; // Assumed data for filtering
+ 
+const login = loginData as any; // Type assertion for login data (contains DateRange)
+const data = medicalRecordData as any; // Type assertion for medical record data
+ 
+test.describe('Medical Records Page - Patient Filtering and Search', () => {
+    let medicalRecordsPage: MedicalRecordsPage;
+    let loginPage: LoginPage;
+ 
+    // Set up and ensure the user is logged in before each test
+    test.beforeEach(async ({ page }) => {
+        medicalRecordsPage = new MedicalRecordsPage(page);
+        loginPage = new LoginPage(page);
+ 
+        // 1. Navigate to the application URL
+        await page.goto('https://healthapp.vaksha.com'); 
+        
+        // 2. Perform Login
+        await loginPage.performLogin({
+            username: login.ValidLogin.ValidUserName,
+            password: login.ValidLogin.ValidPassword
+        });
+        
+        // Ensure home page is loaded
+        await expect(page.url()).not.toContain('login');
+    });
+ 
+    // --- Test: Verify Record Matching by Date and Gender ---
+    test('should filter records by date range and search for a patient by gender', async () => {
+        console.log('Test: Starting Patient Record Filtering Test.');
+        
+        const fromDate = login.DateRange.FromDate;
+        const toDate = login.DateRange.ToDate;
+        const gender = data.MedicalRecordData.patientGender;
+        const searchKeyword = data.MedicalRecordData.searchKeyword;
+ 
+        await medicalRecordsPage.verifyRecordMatching({
+            fromDate: fromDate,
+            toDate: toDate,
+            patientGender: gender,
+            searchKeyword: searchKeyword
+        });
+ 
+        // Final assertion: The presence of a record containing the search keyword and correct gender is verified inside the Page Object method.
+        console.log(` Patient records successfully filtered and verified for search: '${searchKeyword}' and gender: '${gender}'.`);
+    });
+});
+ 
+ 
